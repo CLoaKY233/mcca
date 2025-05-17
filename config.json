@@ -1,0 +1,25 @@
+{
+  "context_servers": {
+    "M.I.S.T.": {
+      "command": {
+        "path": "uv",
+        "args": [
+          "run",
+          "--with",
+          "mcp[cli]",
+          "--with-editable",
+          "B:/under_development/mist",
+          "mcp",
+          "run",
+          "B:/under_development/mist/server.py"
+        ],
+        "env": {
+          "MIST_GOOGLE_CREDENTIALS_PATH": "B:/under_development/mist/credentials.json",
+          "MIST_GOOGLE_TOKEN_PATH": "B:/under_development/mist/token.json",
+          "MIST_NOTES_DIR": "B:/under_development/mist/Notes"
+        }
+      },
+      "settings": {}
+    }
+  }
+}
