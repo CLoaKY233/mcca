@@ -24,7 +24,7 @@ class MCPClient:
         gemini_api_key = os.environ.get("GEMINI_API_KEY")
         if not gemini_api_key:
             raise ValueError("GEMINI_API_KEY environment variable is not set")
-        genai.configure(api_key=gemini_api_key)
+        genai.configure(api_key=gemini_api_key)  # type: ignore
         self.server_name = None
 
     async def connect_to_server_from_config(self, config_path: str, server_name: str):
@@ -68,15 +68,16 @@ class MCPClient:
                     normalized_env[key] = value
 
             environment.update(normalized_env)
-            print(f"Adding environment variables for server '{server_name}':")
+            print(f"🔧 Adding environment variables for server '{server_name}':")
             for key, value in normalized_env.items():
                 print(f"  {key}={value}")
 
-        # Debug the environment variables
-        print("\nFull environment variables that will be passed to the process:")
-        for key, value in sorted(environment.items()):
-            if key.startswith("MIST_"):
-                print(f"  {key}={value}")
+        # Debug the environment variables - only in debug mode
+        if os.environ.get("MCP_DEBUG"):
+            print("\n🔍 Environment variables being passed to the process:")
+            for key, value in sorted(environment.items()):
+                if key.startswith("MIST_"):
+                    print(f"  {key}={value}")
 
         # Create server parameters
         server_params = StdioServerParameters(
@@ -85,31 +86,31 @@ class MCPClient:
             env=environment
         )
 
-        print(f"Connecting to server '{server_name}' with command: {command_path} {' '.join(args)}")
+        print(f"🔄 Connecting to server '{server_name}' with command: {command_path} {' '.join(args)}")
 
         # Connect to the server
         try:
-            print("Establishing connection to server...")
-            print(f"Command: {command_path}")
-            print(f"Args: {args}")
-
+            print("⏳ Establishing connection to server...")
             stdio_transport = await self.exit_stack.enter_async_context(stdio_client(server_params))
             self.stdio, self.write = stdio_transport
-            print("Connection established, creating session...")
+            print("✓ Connection established, creating session...")
             self.session = await self.exit_stack.enter_async_context(ClientSession(self.stdio, self.write))
 
-            print("Initializing session...")
+            print("⏳ Initializing session...")
             await self.session.initialize()
-            print("Session initialized successfully")
+            print("✓ Session initialized successfully")
         except Exception as e:
-            print(f"Error connecting to server: {str(e)}")
+            print(f"❌ Error connecting to server: {str(e)}")
             traceback.print_exc()
             raise
 
         # List available tools
         response = await self.session.list_tools()
         tools = response.tools
-        print(f"\nConnected to server '{server_name}' with tools:", [tool.name for tool in tools])
+
+        # Format tool list for better readability
+        tool_names = [tool.name for tool in tools]
+        print(f"\n🧰 Connected to server '{server_name}' with {len(tool_names)} tools available")
 
     async def process_query(self, query: str) -> str:
         """Process a query using Gemini and available tools"""
@@ -131,13 +132,14 @@ class MCPClient:
 
         # Create model
         try:
-            model = genai.GenerativeModel(
+            model = genai.GenerativeModel(  # type: ignore
                 model_name="gemini-2.0-flash",
                 generation_config={"max_output_tokens": 1000, "temperature": 0.2}
             )
-            print("Successfully created Gemini model")
+            # Debug only
+            # print("Successfully created Gemini model")
         except Exception as e:
-            print(f"ERROR creating Gemini model: {str(e)}")
+            print(f"\n🛑 ERROR creating Gemini model: {str(e)}")
             traceback.print_exc()
             return f"Error creating Gemini model: {str(e)}"
 
@@ -166,13 +168,34 @@ class MCPClient:
         gemini_messages[0]["parts"][0]["text"] += tool_info
 
         try:
-            print("Sending request to Gemini model:")
-            print(f"Messages: {json.dumps(gemini_messages, indent=2)}")
+            # Send request to Gemini model (debug info)
+            # print("Sending request to Gemini model:")
+            # print(f"Messages: {json.dumps(gemini_messages, indent=2)}")
+
+            # Actually send the request
             response = model.generate_content(gemini_messages)
-            print("Received response from Gemini")
-            print(f"Response: {response}")
+
+            # Get usage metrics (try multiple ways depending on response structure)
+            usage_metrics = None
+            try:
+                # Try the direct attribute first
+                if hasattr(response, "usage_metadata"):
+                    usage_metrics = response.usage_metadata
+                # Try through _result next
+                elif hasattr(response, "_result") and hasattr(response._result, "usage_metadata"):
+                    usage_metrics = response._result.usage_metadata
+                # Try through result property
+                elif hasattr(response, "result") and hasattr(response.result, "usage_metadata"):  # type: ignore
+                    usage_metrics = response.result.usage_metadata  # type: ignore
+            except Exception:
+                # Silently handle any errors accessing metrics
+                pass
+
+            # Debug only
+            # print("Received response from Gemini")
+            # print(f"Response: {response}")
         except Exception as e:
-            print(f"ERROR generating content: {str(e)}")
+            print(f"\n🛑 ERROR generating content: {str(e)}")
             traceback.print_exc()
             return f"Error generating content: {str(e)}"
 
@@ -186,29 +209,51 @@ class MCPClient:
 
             # Parse response to look for tool calls
             response_text = response.text if hasattr(response, 'text') else ""
-            print(f"Response text: {response_text}")
+
+            # Debug only
+            # print(f"Response text: {response_text}")
 
             # Extract tool calls using regex pattern
             tool_calls = self._extract_tool_calls(response_text)
-            print(f"Extracted tool calls: {tool_calls}")
+
+            # Debug only
+            # print(f"Extracted tool calls: {tool_calls}")
 
             # If we find tool calls, execute them
             for tool_name, tool_args in tool_calls:
-
-                # Log the tool call
-                final_text.append(f"[Calling tool {tool_name} with args {tool_args}]")
+                # Format tool call for display
+                formatted_args = json.dumps(tool_args, indent=2)
+                tool_call_display = f"\n🔧 Using tool: {tool_name}\n📝 Parameters: {formatted_args}"
+                final_text.append(tool_call_display)
 
                 # Execute tool call through MCP
                 try:
-                    print(f"Calling MCP tool: {tool_name} with args: {tool_args}")
-                    result = await self.session.call_tool(tool_name, tool_args)
-                    print(f"Tool result: {result.content}")
+                    # Debug only
+                    # print(f"Calling MCP tool: {tool_name} with args: {tool_args}")
 
-                    # Add tool response to conversation
-                    text_result = f"Result from tool {tool_name}: {result.content}"
+                    result = await self.session.call_tool(tool_name, tool_args)
+
+                    # Debug only
+                    # print(f"Tool result: {result.content}")
+
+                    # Format and add tool response to conversation
+                    tool_result = str(result.content)
+                    # Parse and format the content for better readability
+                    if isinstance(result.content, str):
+                        # Plain string - just display it
+                        tool_result = result.content
+                    else:
+                        # Convert to string and handle special cases
+                        tool_result = str(result.content)
+                        # Replace escaped newlines with actual newlines
+                        tool_result = tool_result.replace('\\n', '\n')
+                        # Try to clean up any stringified list representation
+                        tool_result = tool_result.replace("', '", "'\n'")
+
+                    text_result = f"\n📊 Result:\n{tool_result}"
                     final_text.append(text_result)
                 except Exception as e:
-                    error_msg = f"Error calling tool {tool_name}: {str(e)}"
+                    error_msg = f"\n❌ Error calling tool {tool_name}: {str(e)}"
                     print(error_msg)
                     traceback.print_exc()
                     final_text.append(error_msg)
@@ -242,47 +287,71 @@ class MCPClient:
 
                     follow_up = model.generate_content(follow_up_messages)
                     if hasattr(follow_up, 'text'):
-                        final_text.append(follow_up.text)
+                        final_text.append("\n" + follow_up.text)
                 except Exception as e:
-                    error_msg = f"Error getting follow-up response: {str(e)}"
+                    error_msg = f"\n❌ Error getting follow-up response: {str(e)}"
                     print(error_msg)
                     final_text.append(error_msg)
 
         except Exception as e:
             traceback.print_exc()
-            final_text.append(f"Error processing response: {str(e)}")
+            final_text.append(f"\n❌ Error processing response: {str(e)}")
+
+        # Add token usage information if available
+        if usage_metrics:
+            try:
+                prompt_tokens = getattr(usage_metrics, "prompt_token_count", "?")
+                response_tokens = getattr(usage_metrics, "candidates_token_count", "?")
+                total_tokens = getattr(usage_metrics, "total_token_count", "?")
+
+                metrics_text = f"\n\n---\n📈 Usage metrics: {prompt_tokens} prompt tokens, " \
+                              f"{response_tokens} response tokens, " \
+                              f"{total_tokens} total tokens"
+                final_text.append(metrics_text)
+            except Exception:
+                # Fallback if attributes aren't accessible as expected
+                metrics_text = f"\n\n---\n📈 Usage metrics available but couldn't be parsed"
+                final_text.append(metrics_text)
 
         return "\n".join(final_text)
 
     async def chat_loop(self):
         """Run an interactive chat loop"""
-        print("\nMCP Client Started!")
-        print(f"Connected to server: {self.server_name}")
-        print("Type your queries or 'quit' to exit.")
-        print("Type 'debug' to print diagnostic information.")
+        print("\n🚀 MCP Client Started!")
+        print(f"🔗 Connected to server: {self.server_name}")
+        print("💬 Type your queries or 'quit' to exit.")
+        print("🛠️ Type 'debug' to print diagnostic information.")
+        print("〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️")
 
         while True:
             try:
-                query = input("\nQuery: ").strip()
+                query = input("\n🔍 Query: ").strip()
 
                 if query.lower() == 'quit':
                     break
 
                 if query.lower() == 'debug':
                     # Print diagnostic information
-                    print("\n--- Diagnostic Information ---")
-                    print(f"Server name: {self.server_name}")
-                    print(f"Session active: {self.session is not None}")
+                    print("\n📊 --- Diagnostic Information ---")
+                    print(f"🔹 Server name: {self.server_name}")
+                    print(f"🔹 Session active: {self.session is not None}")
                     if self.session:
                         tools = await self.session.list_tools()
-                        print(f"Available tools: {[tool.name for tool in tools.tools]}")
+                        print(f"🔹 Available tools: {[tool.name for tool in tools.tools]}")
+                    print("〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️")
                     continue
 
+                print("\n⏳ Processing your query...")
                 response = await self.process_query(query)
-                print("\n" + response)
+
+                # Print a separator before the response
+                print("\n〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️")
+                print("🤖 Response:")
+                print(response)
+                print("〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️")
 
             except Exception as e:
-                print(f"\nError: {str(e)}")
+                print(f"\n❌ Error: {str(e)}")
                 traceback.print_exc()
 
     def _extract_tool_calls(self, text: str) -> List[Tuple[str, Dict[str, Any]]]:
@@ -299,18 +368,20 @@ class MCPClient:
         tool_pattern = re.compile(r'TOOL:\s*([\w\-]+)\s*[\n\r]+\s*PARAMETERS:\s*({.*?})', re.DOTALL)
 
         matches = tool_pattern.findall(text)
-        print(f"Regex matches found: {matches}")
+        # Debug only
+        # print(f"Regex matches found: {matches}")
 
         for tool_name, params_str in matches:
             try:
                 # Try to parse the parameters as JSON
                 # Remove any surrounding markdown backticks
                 cleaned_params = params_str.strip('`').strip()
-                print(f"Parsing parameters for {tool_name}: {cleaned_params}")
+                # Debug only
+                # print(f"Parsing parameters for {tool_name}: {cleaned_params}")
                 params = json.loads(cleaned_params)
                 tool_calls.append((tool_name.strip(), params))
             except json.JSONDecodeError as e:
-                print(f"Failed to parse parameters for tool {tool_name}: {params_str}")
+                print(f"\n⚠️ Failed to parse parameters for tool {tool_name}: {params_str}")
                 print(f"JSON parse error: {str(e)}")
                 # If JSON parsing fails, add with empty params
                 tool_calls.append((tool_name.strip(), {}))
@@ -320,7 +391,7 @@ class MCPClient:
             for tool in self.available_tools:
                 tool_mention = f"use the {tool.name} tool"
                 if tool_mention.lower() in text.lower():
-                    print(f"Found simple tool mention: {tool.name}")
+                    print(f"\nℹ️ Found simple tool mention: {tool.name}")
                     tool_calls.append((tool.name, {}))
 
         return tool_calls
@@ -336,30 +407,30 @@ async def main():
 
     # Always set the GEMINI_API_KEY to ensure it's available
     api_key = "AIzaSyDAwWM1Y5t8vtN12dtvLVaV4oBEhjysWNQ"
-    print(f"Setting GEMINI_API_KEY: {api_key[:5]}...{api_key[-4:]}")
+    print(f"🔑 Setting GEMINI_API_KEY: {api_key[:5]}...{api_key[-4:]}")
     os.environ["GEMINI_API_KEY"] = api_key
 
     # Print Python and package versions for debugging
-    print(f"Python version: {sys.version}")
+    print(f"🐍 Python version: {sys.version}")
     if 'google.generativeai' in sys.modules:
-        print(f"Google Generative AI version: {sys.modules['google.generativeai'].__version__}")
+        print(f"🤖 Google Generative AI version: {sys.modules['google.generativeai'].__version__}")
 
     config_path = sys.argv[1]
     server_name = sys.argv[2]
 
-    print(f"Starting MCP client with config: {config_path}, server: {server_name}")
+    print(f"🚀 Starting MCP client with config: {config_path}, server: {server_name}")
 
     client = MCPClient()
     try:
         await client.connect_to_server_from_config(config_path, server_name)
         await client.chat_loop()
     except Exception as e:
-        print(f"Fatal error: {str(e)}")
+        print(f"❌ Fatal error: {str(e)}")
         traceback.print_exc()
     finally:
-        print("Cleaning up resources...")
+        print("🧹 Cleaning up resources...")
         await client.cleanup()
-        print("Cleanup complete")
+        print("✓ Cleanup complete")
 
 if __name__ == "__main__":
     asyncio.run(main())
