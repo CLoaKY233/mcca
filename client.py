@@ -9,7 +9,7 @@ from contextlib import AsyncExitStack
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
-import google.generativeai as genai
+import ollama
 
 from dotenv import load_dotenv
 
@@ -20,12 +20,12 @@ class MCPClient:
         # Initialize session and client objects
         self.session: Optional[ClientSession] = None
         self.exit_stack = AsyncExitStack()
-        # Initialize Gemini API
-        gemini_api_key = os.environ.get("GEMINI_API_KEY")
-        if not gemini_api_key:
-            raise ValueError("GEMINI_API_KEY environment variable is not set")
-        genai.configure(api_key=gemini_api_key)  # type: ignore
+        # No API key needed for Ollama
         self.server_name = None
+        # Get model name from environment or use default
+        self.ollama_model = os.environ.get("OLLAMA_MODEL", "llama3-groq-tool-use:8b")
+        # Get host from environment if specified
+        self.ollama_host = os.environ.get("OLLAMA_HOST", None)
 
     async def connect_to_server_from_config(self, config_path: str, server_name: str):
         """Connect to an MCP server using configuration
@@ -113,7 +113,7 @@ class MCPClient:
         print(f"\n🧰 Connected to server '{server_name}' with {len(tool_names)} tools available")
 
     async def process_query(self, query: str) -> str:
-        """Process a query using Gemini and available tools"""
+        """Process a query using Ollama and available tools"""
         messages = [
             {
                 "role": "user",
@@ -130,25 +130,6 @@ class MCPClient:
         # Store available_tools for later use
         self.available_tools = available_tools
 
-        # Create model
-        try:
-            model = genai.GenerativeModel(  # type: ignore
-                model_name="gemini-2.0-flash",
-                generation_config={"max_output_tokens": 1000, "temperature": 0.2}
-            )
-            # Debug only
-            # print("Successfully created Gemini model")
-        except Exception as e:
-            print(f"\n🛑 ERROR creating Gemini model: {str(e)}")
-            traceback.print_exc()
-            return f"Error creating Gemini model: {str(e)}"
-
-        # Create Gemini-formatted messages
-        gemini_messages = []
-        for msg in messages:
-            role = "user" if msg["role"] == "user" else "model"
-            gemini_messages.append({"role": role, "parts": [{"text": msg["content"]}]})
-
         # Add instructions about available tools
         tool_info = "\n\nAvailable tools:\n"
         for tool in available_tools:
@@ -164,59 +145,37 @@ class MCPClient:
         tool_info += "TOOL: tool_name\n"
         tool_info += "PARAMETERS: {\"param1\": \"value1\", \"param2\": \"value2\"}\n"
 
-        # Add tool information to the user query
-        gemini_messages[0]["parts"][0]["text"] += tool_info
-
-        try:
-            # Send request to Gemini model (debug info)
-            # print("Sending request to Gemini model:")
-            # print(f"Messages: {json.dumps(gemini_messages, indent=2)}")
-
-            # Actually send the request
-            response = model.generate_content(gemini_messages)
-
-            # Get usage metrics (try multiple ways depending on response structure)
-            usage_metrics = None
-            try:
-                # Try the direct attribute first
-                if hasattr(response, "usage_metadata"):
-                    usage_metrics = response.usage_metadata
-                # Try through _result next
-                elif hasattr(response, "_result") and hasattr(response._result, "usage_metadata"):
-                    usage_metrics = response._result.usage_metadata
-                # Try through result property
-                elif hasattr(response, "result") and hasattr(response.result, "usage_metadata"):  # type: ignore
-                    usage_metrics = response.result.usage_metadata  # type: ignore
-            except Exception:
-                # Silently handle any errors accessing metrics
-                pass
-
-            # Debug only
-            # print("Received response from Gemini")
-            # print(f"Response: {response}")
-        except Exception as e:
-            print(f"\n🛑 ERROR generating content: {str(e)}")
-            traceback.print_exc()
-            return f"Error generating content: {str(e)}"
+        # Prepare Ollama messages
+        ollama_messages = []
+        # Add initial user query with tool info
+        initial_user_content = query + tool_info
+        ollama_messages.append({"role": "user", "content": initial_user_content})
 
         # Process response and handle tool calls
         final_text = []
 
         try:
-            # Add text response
-            if hasattr(response, 'text'):
-                final_text.append(response.text)
+            # Send request to Ollama model
+            # print(f"Sending request to Ollama model codellama:latest")
+            # print(f"Messages: {json.dumps(ollama_messages, indent=2)}")
 
-            # Parse response to look for tool calls
-            response_text = response.text if hasattr(response, 'text') else ""
+            # Use model name from environment variable
+            ollama_kwargs = {"model": self.ollama_model, "messages": ollama_messages}
+            # Add host if specified in environment
+            if self.ollama_host:
+                ollama_kwargs["host"] = self.ollama_host
 
-            # Debug only
-            # print(f"Response text: {response_text}")
+            ollama_response = ollama.chat(**ollama_kwargs)
+
+            response_text = ollama_response['message']['content']
+            # print(f"Received response from Ollama: {response_text}")
+            final_text.append(response_text)
+
+            # Add assistant's response to message history for potential follow-up
+            ollama_messages.append({"role": "assistant", "content": response_text})
 
             # Extract tool calls using regex pattern
             tool_calls = self._extract_tool_calls(response_text)
-
-            # Debug only
             # print(f"Extracted tool calls: {tool_calls}")
 
             # If we find tool calls, execute them
@@ -226,14 +185,9 @@ class MCPClient:
                 tool_call_display = f"\n🔧 Using tool: {tool_name}\n📝 Parameters: {formatted_args}"
                 final_text.append(tool_call_display)
 
-                # Execute tool call through MCP
                 try:
-                    # Debug only
                     # print(f"Calling MCP tool: {tool_name} with args: {tool_args}")
-
                     result = await self.session.call_tool(tool_name, tool_args)
-
-                    # Debug only
                     # print(f"Tool result: {result.content}")
 
                     # Format and add tool response to conversation
@@ -252,66 +206,40 @@ class MCPClient:
 
                     text_result = f"\n📊 Result:\n{tool_result}"
                     final_text.append(text_result)
+
+                    # Add tool execution result to messages for follow-up
+                    text_result_for_llm = f"Tool {tool_name} execution result: {tool_result}"
+                    ollama_messages.append({"role": "user", "content": text_result_for_llm})
+
+                    # Get follow-up response from Ollama
+                    # print("Getting follow-up response from Ollama...")
+                    # print(f"Follow-up messages: {json.dumps(ollama_messages, indent=2)}")
+
+                    # Use model name from environment variable
+                    ollama_kwargs = {"model": self.ollama_model, "messages": ollama_messages}
+                    # Add host if specified in environment
+                    if self.ollama_host:
+                        ollama_kwargs["host"] = self.ollama_host
+
+                    follow_up_response_data = ollama.chat(**ollama_kwargs)
+                    follow_up_text = follow_up_response_data['message']['content']
+                    final_text.append("\n" + follow_up_text)
+
+                    # Add this follow-up to messages if further interaction is planned in this turn
+                    ollama_messages.append({"role": "assistant", "content": follow_up_text})
+
                 except Exception as e:
-                    error_msg = f"\n❌ Error calling tool {tool_name}: {str(e)}"
+                    error_msg = f"\n❌ Error calling tool {tool_name} or getting follow-up: {str(e)}"
                     print(error_msg)
                     traceback.print_exc()
                     final_text.append(error_msg)
-                    text_result = error_msg
-
-                # Continue conversation with tool results
-                # Add assistant response and tool result to the conversation history
-                if hasattr(response, 'text') and response.text:
-                    gemini_messages.append({"role": "model", "parts": [{"text": response.text}]})
-                gemini_messages.append({"role": "user", "parts": [{"text": text_result}]})
-
-                # Get follow-up response
-                try:
-                    # For the follow-up, don't include the tool instructions again
-                    follow_up_messages = []
-                    for msg in gemini_messages:
-                        if msg["role"] == "user" and len(follow_up_messages) == 0:
-                            # This is the first user message with our tool instructions
-                            # Don't include tool instructions in follow-up
-                            original_text = msg["parts"][0]["text"]
-                            if "Available tools:" in original_text:
-                                clean_text = original_text.split("Available tools:")[0]
-                                follow_up_messages.append({
-                                    "role": msg["role"],
-                                    "parts": [{"text": clean_text}]
-                                })
-                            else:
-                                follow_up_messages.append(msg)
-                        else:
-                            follow_up_messages.append(msg)
-
-                    follow_up = model.generate_content(follow_up_messages)
-                    if hasattr(follow_up, 'text'):
-                        final_text.append("\n" + follow_up.text)
-                except Exception as e:
-                    error_msg = f"\n❌ Error getting follow-up response: {str(e)}"
-                    print(error_msg)
-                    final_text.append(error_msg)
+                    # Add error as context for the model if needed for a follow-up
+                    ollama_messages.append({"role": "user", "content": f"Error during tool call for {tool_name}: {str(e)}"})
 
         except Exception as e:
+            print(f"\n🛑 ERROR generating content with Ollama: {str(e)}")
             traceback.print_exc()
-            final_text.append(f"\n❌ Error processing response: {str(e)}")
-
-        # Add token usage information if available
-        if usage_metrics:
-            try:
-                prompt_tokens = getattr(usage_metrics, "prompt_token_count", "?")
-                response_tokens = getattr(usage_metrics, "candidates_token_count", "?")
-                total_tokens = getattr(usage_metrics, "total_token_count", "?")
-
-                metrics_text = f"\n\n---\n📈 Usage metrics: {prompt_tokens} prompt tokens, " \
-                              f"{response_tokens} response tokens, " \
-                              f"{total_tokens} total tokens"
-                final_text.append(metrics_text)
-            except Exception:
-                # Fallback if attributes aren't accessible as expected
-                metrics_text = f"\n\n---\n📈 Usage metrics available but couldn't be parsed"
-                final_text.append(metrics_text)
+            final_text.append(f"Error generating content with Ollama: {str(e)}")
 
         return "\n".join(final_text)
 
@@ -405,20 +333,16 @@ async def main():
         print("Usage: python client.py <config_file_path> <server_name>")
         sys.exit(1)
 
-    # Always set the GEMINI_API_KEY to ensure it's available
-    api_key = "AIzaSyDAwWM1Y5t8vtN12dtvLVaV4oBEhjysWNQ"
-    print(f"🔑 Setting GEMINI_API_KEY: {api_key[:5]}...{api_key[-4:]}")
-    os.environ["GEMINI_API_KEY"] = api_key
-
-    # Print Python and package versions for debugging
+    # Print Python version for debugging
     print(f"🐍 Python version: {sys.version}")
-    if 'google.generativeai' in sys.modules:
-        print(f"🤖 Google Generative AI version: {sys.modules['google.generativeai'].__version__}")
 
     config_path = sys.argv[1]
     server_name = sys.argv[2]
 
     print(f"🚀 Starting MCP client with config: {config_path}, server: {server_name}")
+    # Display the model that will be used
+    ollama_model = os.environ.get("OLLAMA_MODEL", "codellama:latest")
+    print(f"🤖 Using Ollama with model: {ollama_model}")
 
     client = MCPClient()
     try:
