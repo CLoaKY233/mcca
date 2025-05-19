@@ -52,15 +52,54 @@ class GeminiLLM(BaseLLM):
         """
         gemini_messages = []
 
-        for msg in messages:
-            role = "user" if msg["role"] == "user" else "model"
+        for i, msg in enumerate(messages):
+            role = msg["role"]
             content = msg["content"]
 
-            # Add tool info to the first user message
-            if role == "user" and len(gemini_messages) == 0 and tool_info:
-                content += tool_info
+            # Convert tool results to a formatted text representation
+            if role == "tool":
+                # Tool results need to be formatted as text since Gemini Python SDK
+                # doesn't directly support functionResponse in parts
+                if isinstance(content, dict):
+                    tool_name = content.get("tool_name", "unknown_tool")
+                    tool_result = content.get("result")
+                    tool_error = content.get("error")
 
-            gemini_messages.append({"role": role, "parts": [{"text": content}]})
+                    # Format as clearly marked text that the LLM can understand
+                    formatted_text = f"### TOOL RESULT: {tool_name}\n"
+                    if tool_result is not None:
+                        formatted_text += f"{tool_result}\n"
+                    elif tool_error is not None:
+                        formatted_text += f"ERROR: {tool_error}\n"
+
+                    # Add as a user message since Gemini understands user/model roles
+                    gemini_messages.append(
+                        {"role": "user", "parts": [{"text": formatted_text}]}
+                    )
+                else:
+                    # Fallback for unexpected format
+                    gemini_messages.append(
+                        {
+                            "role": "user",
+                            "parts": [{"text": f"Tool result: {str(content)}"}],
+                        }
+                    )
+
+            elif role == "user":
+                user_content = content
+                # Add tool info to the first user message only
+                if i == 0 and tool_info:
+                    user_content += tool_info
+
+                gemini_messages.append(
+                    {"role": "user", "parts": [{"text": user_content}]}
+                )
+
+            elif role == "model":
+                if content:  # Skip empty model responses
+                    gemini_messages.append(
+                        {"role": "model", "parts": [{"text": content}]}
+                    )
 
         return gemini_messages
 

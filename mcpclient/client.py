@@ -1,12 +1,12 @@
-# mcpclient/client.py
 from typing import Dict, Any, List, Optional, AsyncGenerator
 import traceback
 
 from mcpclient.config import Config
 from mcpclient.session import MCPSession
 from mcpclient.connectors.stdio import StdioConnector
-from mcpclient.llm.gemini import GeminiLLM
+from mcpclient.llm.gemini import GeminiLLM  # Ensure GeminiLLM is imported
 from mcpclient.tools.extraction import ToolExtractor
+from mcpclient.tools.execution import ToolExecutor  # Import ToolExecutor
 
 
 class MCPClient:
@@ -169,68 +169,95 @@ class MCPClient:
         return "\n".join(final_text)
 
     async def process_query_streaming(self, query: str) -> AsyncGenerator[str, None]:
-        """Process a query with streaming response
+        """Process a query with streaming response.
+
+        Simple flow:
+        1. User sends message
+        2. LLM responds
+        3. If response has tool call, execute tool
+        4. Send tool result back to LLM
+        5. Repeat 2-4 until no more tool calls
 
         Args:
             query: User query
 
         Yields:
             Response chunks
-
-        Raises:
-            RuntimeError: If no active session
         """
         if not self.active_session:
             raise RuntimeError("No active session. Connect to a server first.")
 
-        # Create initial messages
-        messages = [{"role": "user", "content": query}]
-
-        # Get tool information
+        # Get available tools
         tools = self.active_session.available_tools
         tool_info = self._format_tool_info(tools)
 
-        # Get initial response with streaming
-        initial_response = []
-        async for chunk in self.llm.generate_streaming(messages, tool_info):
-            initial_response.append(chunk)
-            yield chunk
+        # Start with user message
+        messages = [{"role": "user", "content": query}]
 
-        response_text = "".join(initial_response)
+        # Maximum number of turns to prevent infinite loops
+        max_turns = 10
+        turn_count = 0
 
-        # Extract tool calls
-        tool_calls = ToolExtractor.extract_tool_calls(response_text, tools)
+        while turn_count < max_turns:
+            turn_count += 1
 
-        # Process tool calls
-        for tool_name, tool_args in tool_calls:
-            # Format and add tool call to response
-            formatted_args = str(tool_args)
-            tool_call_display = (
-                f"\n🔧 Using tool: {tool_name}\n📝 Parameters: {formatted_args}"
-            )
-            yield tool_call_display
-
+            # --- Get LLM Response ---
+            llm_response = ""
             try:
-                # Execute tool
-                result = await self.active_session.call_tool(tool_name, tool_args)
+                # Separate turns with visual indicator if not the first turn
+                if turn_count > 1:
+                    yield "\n\n"
 
-                # Format the result
-                tool_result = str(result.content)
-                result_display = f"\n📊 Result:\n{tool_result}"
-                yield result_display
-
-                # Get follow-up response with streaming
-                follow_up_messages = messages.copy()
-                follow_up_messages.append({"role": "model", "content": response_text})
-                follow_up_messages.append({"role": "user", "content": result_display})
-
-                yield "\n"
-                async for chunk in self.llm.generate_streaming(follow_up_messages):
+                # Stream LLM response
+                async for chunk in self.llm.generate_streaming(
+                    messages, tool_info if turn_count == 1 else None
+                ):
+                    llm_response += chunk
                     yield chunk
 
             except Exception as e:
-                error_msg = f"\n❌ Error calling tool {tool_name}: {str(e)}"
-                yield error_msg
+                yield f"\n\n❌ Error: {str(e)}\n"
+                break
+
+            # Add LLM response to conversation history
+            messages.append({"role": "model", "content": llm_response})
+
+            # --- Extract Tool Calls ---
+            tool_calls = ToolExtractor.extract_tool_calls(llm_response, tools)
+
+            # If no tool calls, we're done
+            if not tool_calls:
+                break
+
+            # --- Execute Tools ---
+            for tool_name, tool_args in tool_calls:
+                # Format tool call for output
+                yield f"\n\n🔧 Using tool: {tool_name}\n📝 Parameters: {str(tool_args)}"
+
+                try:
+                    # Execute the tool
+                    result = await self.active_session.call_tool(tool_name, tool_args)
+
+                    # Format and show result
+                    result_text = ToolExecutor.format_tool_result(result)
+                    yield f"\n📊 Result:\n{result_text}"
+
+                    # Add tool result to conversation history - as a formatted string in a user message
+                    # This is more compatible with most LLM APIs
+                    result_content = f"TOOL RESULT: {tool_name}\n{result_text}"
+                    messages.append({"role": "user", "content": result_content})
+
+                except Exception as e:
+                    error_msg = f"\n❌ Error: {str(e)}"
+                    yield error_msg
+
+                    # Add error to conversation history - as a formatted string in a user message
+                    error_content = f"TOOL ERROR: {tool_name}\n{str(e)}"
+                    messages.append({"role": "user", "content": error_content})
+
+        # If we hit the max turn limit
+        if turn_count >= max_turns:
+            yield f"\n\n❌ Reached maximum number of turns ({max_turns})."
 
     async def get_available_servers(self) -> List[str]:
         """Get list of available servers
