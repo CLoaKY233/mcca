@@ -4,11 +4,11 @@ import os
 from typing import Dict, Any, List, Optional, AsyncGenerator, Tuple
 import traceback
 
-from config import Config
-from session import MCPSession
-from connectors.stdio import StdioConnector
-from llm.gemini import GeminiLLM
-from tools.extraction import ToolExtractor
+from mcpclient.config import Config
+from mcpclient.session import MCPSession
+from mcpclient.connectors.stdio import StdioConnector
+from mcpclient.llm.gemini import GeminiLLM
+from mcpclient.tools.extraction import ToolExtractor
 
 class MCPClient:
     """Client for interacting with MCP servers"""

@@ -4,7 +4,7 @@ import sys
 import os
 import traceback
 
-from client import MCPClient
+from mcpclient.client import MCPClient
 
 async def select_server(client):
     """Interactive server selection if multiple servers are available"""

@@ -1,7 +1,7 @@
 # mcpclient/session.py
-from typing import Dict, Any, List, Optional
-from mcp.types import Tool
-from connectors.base import BaseConnector
+from typing import Dict, Any, List, Optional, Union
+from mcp.types import Tool, InitializeResult
+from mcpclient.connectors.base import BaseConnector
 
 class MCPSession:
     """Session manager for MCP connections"""
@@ -39,9 +39,9 @@ class MCPSession:
         Returns:
             Session information
         """
-        self.session_info = await self.connector.initialize()
+        self.session_info = await self.connector.initialize()  # type: ignore
         self.tools = self.connector.tools
-        return self.session_info
+        return self.session_info or {}
 
     async def call_tool(self, name: str, arguments: Dict[str, Any]) -> Any:
         """Call an MCP tool
