@@ -1,7 +1,5 @@
 # mcpclient/client.py
-import asyncio
-import os
-from typing import Dict, Any, List, Optional, AsyncGenerator, Tuple
+from typing import Dict, Any, List, Optional, AsyncGenerator
 import traceback
 
 from mcpclient.config import Config
@@ -10,10 +8,15 @@ from mcpclient.connectors.stdio import StdioConnector
 from mcpclient.llm.gemini import GeminiLLM
 from mcpclient.tools.extraction import ToolExtractor
 
+
 class MCPClient:
     """Client for interacting with MCP servers"""
 
-    def __init__(self, config_path: Optional[str] = None, config_dict: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self,
+        config_path: Optional[str] = None,
+        config_dict: Optional[Dict[str, Any]] = None,
+    ):
         """Initialize a new MCP client
 
         Args:
@@ -40,7 +43,9 @@ class MCPClient:
 
             # Extract command details
             if "command" not in server_config:
-                raise ValueError(f"Server '{server_name}' does not have command configuration")
+                raise ValueError(
+                    f"Server '{server_name}' does not have command configuration"
+                )
 
             cmd_config = server_config["command"]
             command_path = cmd_config.get("path")
@@ -59,7 +64,9 @@ class MCPClient:
             await self.active_session.initialize()
             self.active_server_name = server_name
 
-            print(f"✅ Connected to server '{server_name}' with {len(self.active_session.tools)} tools available")
+            print(
+                f"✅ Connected to server '{server_name}' with {len(self.active_session.tools)} tools available"
+            )
 
         except Exception as e:
             print(f"❌ Error connecting to server: {str(e)}")
@@ -78,18 +85,23 @@ class MCPClient:
         tool_info = "\n\nAvailable tools:\n"
         for tool in tools:
             tool_info += f"- {tool.name}: {tool.description}\n"
-            if hasattr(tool, 'inputSchema') and tool.inputSchema:
+            if hasattr(tool, "inputSchema") and tool.inputSchema:
                 if "properties" in tool.inputSchema:
                     tool_info += "  Parameters:\n"
-                    for param_name, param_details in tool.inputSchema["properties"].items():
-                        required = "required" in tool.inputSchema and param_name in tool.inputSchema["required"]
+                    for param_name, param_details in tool.inputSchema[
+                        "properties"
+                    ].items():
+                        required = (
+                            "required" in tool.inputSchema
+                            and param_name in tool.inputSchema["required"]
+                        )
                         req_tag = " (required)" if required else ""
                         tool_info += f"    - {param_name}{req_tag}: {param_details.get('description', '')}\n"
 
         # Add instructions for how to call tools
         tool_info += "\nTo call a tool, use this format in your response:\n"
         tool_info += "TOOL: tool_name\n"
-        tool_info += "PARAMETERS: {\"param1\": \"value1\", \"param2\": \"value2\"}\n"
+        tool_info += 'PARAMETERS: {"param1": "value1", "param2": "value2"}\n'
 
         return tool_info
 
@@ -128,7 +140,9 @@ class MCPClient:
         for tool_name, tool_args in tool_calls:
             # Format and add tool call to response
             formatted_args = str(tool_args)
-            tool_call_display = f"\n🔧 Using tool: {tool_name}\n📝 Parameters: {formatted_args}"
+            tool_call_display = (
+                f"\n🔧 Using tool: {tool_name}\n📝 Parameters: {formatted_args}"
+            )
             final_text.append(tool_call_display)
 
             try:
@@ -191,7 +205,9 @@ class MCPClient:
         for tool_name, tool_args in tool_calls:
             # Format and add tool call to response
             formatted_args = str(tool_args)
-            tool_call_display = f"\n🔧 Using tool: {tool_name}\n📝 Parameters: {formatted_args}"
+            tool_call_display = (
+                f"\n🔧 Using tool: {tool_name}\n📝 Parameters: {formatted_args}"
+            )
             yield tool_call_display
 
             try:

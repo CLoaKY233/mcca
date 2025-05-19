@@ -3,11 +3,14 @@ import json
 from typing import Dict, Any, List, Tuple, Optional
 import traceback
 
+
 class ToolExecutor:
     """Executes MCP tools and processes results"""
 
     @staticmethod
-    async def execute_tool(session, tool_name: str, tool_args: Dict[str, Any]) -> Tuple[bool, Any, str]:
+    async def execute_tool(
+        session, tool_name: str, tool_args: Dict[str, Any]
+    ) -> Tuple[bool, Any, str]:
         """Execute a tool and process the result
 
         Args:
@@ -43,7 +46,7 @@ class ToolExecutor:
             Formatted result string
         """
         # Handle different result types
-        if hasattr(result, 'content'):
+        if hasattr(result, "content"):
             content = result.content
 
             # Handle string content
@@ -54,22 +57,24 @@ class ToolExecutor:
             if isinstance(content, list):
                 formatted_parts = []
                 for item in content:
-                    if hasattr(item, 'text'):
+                    if hasattr(item, "text"):
                         formatted_parts.append(item.text)
-                    elif hasattr(item, 'data'):
+                    elif hasattr(item, "data"):
                         formatted_parts.append(f"[Image/Data: {item.data[:20]}...]")
                     else:
                         formatted_parts.append(str(item))
                 return "\n".join(formatted_parts)
 
             # Handle other content types
-            return str(content).replace('\\n', '\n')
+            return str(content).replace("\\n", "\n")
 
         # Default fallback
         return str(result)
 
     @staticmethod
-    def validate_tool_args(tool, args: Dict[str, Any]) -> Tuple[bool, Optional[Dict[str, Any]], Optional[str]]:
+    def validate_tool_args(
+        tool, args: Dict[str, Any]
+    ) -> Tuple[bool, Optional[Dict[str, Any]], Optional[str]]:
         """Validate tool arguments against schema
 
         Args:
@@ -79,7 +84,7 @@ class ToolExecutor:
         Returns:
             Tuple of (is_valid, processed_args, error_message)
         """
-        if not hasattr(tool, 'inputSchema') or not tool.inputSchema:
+        if not hasattr(tool, "inputSchema") or not tool.inputSchema:
             # No schema to validate against
             return True, args, None
 
@@ -106,7 +111,9 @@ class ToolExecutor:
 
                     # Handle null values
                     if value is None:
-                        if prop_type == "null" or (isinstance(prop_type, list) and "null" in prop_type):
+                        if prop_type == "null" or (
+                            isinstance(prop_type, list) and "null" in prop_type
+                        ):
                             continue
                         else:
                             return False, None, f"Field {prop_name} cannot be null"
@@ -133,7 +140,11 @@ class ToolExecutor:
                             elif value.lower() == "false":
                                 processed_args[prop_name] = False
                             else:
-                                return False, None, f"Field {prop_name} must be a boolean"
+                                return (
+                                    False,
+                                    None,
+                                    f"Field {prop_name} must be a boolean",
+                                )
                         else:
                             return False, None, f"Field {prop_name} must be a boolean"
                     elif prop_type == "array" and not isinstance(value, list):
@@ -142,7 +153,11 @@ class ToolExecutor:
                             try:
                                 processed_args[prop_name] = json.loads(value)
                             except json.JSONDecodeError:
-                                return False, None, f"Field {prop_name} must be an array"
+                                return (
+                                    False,
+                                    None,
+                                    f"Field {prop_name} must be an array",
+                                )
                         else:
                             return False, None, f"Field {prop_name} must be an array"
                     elif prop_type == "object" and not isinstance(value, dict):
@@ -151,7 +166,11 @@ class ToolExecutor:
                             try:
                                 processed_args[prop_name] = json.loads(value)
                             except json.JSONDecodeError:
-                                return False, None, f"Field {prop_name} must be an object"
+                                return (
+                                    False,
+                                    None,
+                                    f"Field {prop_name} must be an object",
+                                )
                         else:
                             return False, None, f"Field {prop_name} must be an object"
 

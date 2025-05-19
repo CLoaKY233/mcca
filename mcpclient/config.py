@@ -3,10 +3,15 @@ import json
 import os
 from typing import Dict, Any, Optional
 
+
 class Config:
     """Configuration manager for MCP client"""
 
-    def __init__(self, config_path: Optional[str] = None, config_dict: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self,
+        config_path: Optional[str] = None,
+        config_dict: Optional[Dict[str, Any]] = None,
+    ):
         """Initialize configuration
 
         Args:
@@ -30,7 +35,7 @@ class Config:
             ValueError: If file cannot be read or parsed
         """
         try:
-            with open(path, 'r') as f:
+            with open(path, "r") as f:
                 self.config = json.load(f)
         except (FileNotFoundError, json.JSONDecodeError) as e:
             raise ValueError(f"Error loading config file: {str(e)}")
@@ -47,7 +52,10 @@ class Config:
         Raises:
             ValueError: If server not found
         """
-        if "context_servers" not in self.config or server_name not in self.config["context_servers"]:
+        if (
+            "context_servers" not in self.config
+            or server_name not in self.config["context_servers"]
+        ):
             raise ValueError(f"Server '{server_name}' not found in config")
 
         return self.config["context_servers"][server_name]

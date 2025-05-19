@@ -1,15 +1,18 @@
 # mcpclient/tools/extraction.py
 import re
 import json
+
 # mcpclient/tools/extraction.py
-from typing import List, Tuple, Dict, Any, Optional, Union
+from typing import List, Tuple, Dict, Any, Optional
+
 
 class ToolExtractor:
     """Extracts tool calls from text"""
 
     @staticmethod
-    def extract_tool_calls(text: str,
-                          available_tools: Optional[List[Any]] = None) -> List[Tuple[str, Dict[str, Any]]]:
+    def extract_tool_calls(
+        text: str, available_tools: Optional[List[Any]] = None
+    ) -> List[Tuple[str, Dict[str, Any]]]:
         """Extract tool calls from text
 
         Args:
@@ -22,7 +25,9 @@ class ToolExtractor:
         tool_calls = []
 
         # Look for the pattern TOOL: name followed by PARAMETERS: {...}
-        tool_pattern = re.compile(r'TOOL:\s*([\w\-]+)\s*[\n\r]+\s*PARAMETERS:\s*({.*?})', re.DOTALL)
+        tool_pattern = re.compile(
+            r"TOOL:\s*([\w\-]+)\s*[\n\r]+\s*PARAMETERS:\s*({.*?})", re.DOTALL
+        )
 
         matches = tool_pattern.findall(text)
 
@@ -30,7 +35,7 @@ class ToolExtractor:
             try:
                 # Try to parse the parameters as JSON
                 # Remove any surrounding markdown backticks
-                cleaned_params = params_str.strip('`').strip()
+                cleaned_params = params_str.strip("`").strip()
                 params = json.loads(cleaned_params)
                 tool_calls.append((tool_name.strip(), params))
             except json.JSONDecodeError:

@@ -1,7 +1,8 @@
 # mcpclient/session.py
-from typing import Dict, Any, List, Optional, Union
-from mcp.types import Tool, InitializeResult
+from typing import Dict, Any, List, Optional
+from mcp.types import Tool
 from mcpclient.connectors.base import BaseConnector
+
 
 class MCPSession:
     """Session manager for MCP connections"""

@@ -1,10 +1,10 @@
 # mcpclient/cli.py
 import asyncio
 import sys
-import os
 import traceback
 
 from mcpclient.client import MCPClient
+
 
 async def select_server(client):
     """Interactive server selection if multiple servers are available"""
@@ -23,7 +23,7 @@ async def select_server(client):
     # Multiple servers, let the user choose
     print("\nAvailable servers:")
     for i, name in enumerate(servers):
-        print(f"{i+1}. {name}")
+        print(f"{i + 1}. {name}")
 
     while True:
         try:
@@ -41,9 +41,12 @@ async def select_server(client):
                 if choice in servers:
                     return choice
                 else:
-                    print("❌ Server not found. Please enter a valid server name or number.")
+                    print(
+                        "❌ Server not found. Please enter a valid server name or number."
+                    )
         except KeyboardInterrupt:
             return None
+
 
 async def chat_loop(client):
     """Run an interactive chat loop"""
@@ -59,18 +62,18 @@ async def chat_loop(client):
         try:
             query = input("\n🔍 Query: ").strip()
 
-            if query.lower() == 'quit':
+            if query.lower() == "quit":
                 break
 
-            if query.lower() == 'servers':
+            if query.lower() == "servers":
                 servers = await client.get_available_servers()
                 print("\nAvailable servers:")
                 for i, name in enumerate(servers):
                     active = " (ACTIVE)" if name == client.active_server_name else ""
-                    print(f"{i+1}. {name}{active}")
+                    print(f"{i + 1}. {name}{active}")
                 continue
 
-            if query.lower().startswith('connect '):
+            if query.lower().startswith("connect "):
                 server_name = query[8:].strip()
                 print(f"\n⏳ Connecting to server '{server_name}'...")
                 await client.disconnect()
@@ -78,7 +81,7 @@ async def chat_loop(client):
                 print(f"✅ Connected to server '{server_name}'")
                 continue
 
-            if query.lower() == 'debug':
+            if query.lower() == "debug":
                 # Print diagnostic information
                 print("\n📊 --- Diagnostic Information ---")
                 print(f"🔹 Server name: {client.active_server_name}")
@@ -103,6 +106,7 @@ async def chat_loop(client):
         except Exception as e:
             print(f"\n❌ Error: {str(e)}")
             traceback.print_exc()
+
 
 async def main():
     # Make server_name optional
@@ -134,6 +138,7 @@ async def main():
         print("🧹 Cleaning up resources...")
         await client.disconnect()
         print("✓ Cleanup complete")
+
 
 if __name__ == "__main__":
     asyncio.run(main())

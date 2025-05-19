@@ -4,10 +4,12 @@ from typing import Any, Dict, List, Optional, TypedDict, Union
 from mcp import ClientSession
 from mcp.types import Tool, InitializeResult
 
+
 # Define a TypedDict for the initialize result if needed
 class SessionInfo(TypedDict, total=False):
     capabilities: Dict[str, Any]
     serverInfo: Dict[str, Any]
+
 
 class BaseConnector(ABC):
     """Base connector for MCP implementations"""
@@ -47,25 +49,25 @@ class BaseConnector(ABC):
         pass
 
     async def initialize(self) -> Union[InitializeResult, Dict[str, Any]]:
-            """Initialize the MCP session
+        """Initialize the MCP session
 
-            Returns:
-                Session information
+        Returns:
+            Session information
 
-            Raises:
-                RuntimeError: If not connected
-            """
-            if not self.session:
-                raise RuntimeError("Not connected to MCP implementation")
+        Raises:
+            RuntimeError: If not connected
+        """
+        if not self.session:
+            raise RuntimeError("Not connected to MCP implementation")
 
-            # Initialize the session
-            result = await self.session.initialize()
+        # Initialize the session
+        result = await self.session.initialize()
 
-            # Get available tools
-            tools_result = await self.session.list_tools()
-            self._tools = tools_result.tools
+        # Get available tools
+        tools_result = await self.session.list_tools()
+        self._tools = tools_result.tools
 
-            return result
+        return result
 
     async def call_tool(self, name: str, arguments: Dict[str, Any]) -> Any:
         """Call an MCP tool

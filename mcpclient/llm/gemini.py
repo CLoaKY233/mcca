@@ -1,8 +1,7 @@
 # mcpclient/llm/gemini.py
 # type: ignore
 import os
-from typing import List, Dict, Any, AsyncGenerator, Optional, Coroutine
-from types import CoroutineType
+from typing import List, Dict, Any, AsyncGenerator, Optional
 import google.generativeai as genai
 
 from .base import BaseLLM
@@ -10,10 +9,13 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
 class GeminiLLM(BaseLLM):
     """Gemini LLM integration"""
 
-    def __init__(self, api_key: Optional[str] = None, model_name: str = "gemini-2.0-flash"):
+    def __init__(
+        self, api_key: Optional[str] = None, model_name: str = "gemini-2.0-flash"
+    ):
         """Initialize Gemini LLM
 
         Args:
@@ -22,7 +24,9 @@ class GeminiLLM(BaseLLM):
         """
         self.api_key = api_key or os.environ.get("GEMINI_API_KEY")
         if not self.api_key:
-            raise ValueError("GEMINI_API_KEY not provided and not found in environment variables")
+            raise ValueError(
+                "GEMINI_API_KEY not provided and not found in environment variables"
+            )
 
         self.model_name = model_name
         genai.configure(api_key=self.api_key)
@@ -31,10 +35,12 @@ class GeminiLLM(BaseLLM):
         """Create Gemini model instance"""
         return genai.GenerativeModel(
             model_name=self.model_name,
-            generation_config={"max_output_tokens": 1000, "temperature": 0.2}
+            generation_config={"max_output_tokens": 1000, "temperature": 0.2},
         )
 
-    def _prepare_messages(self, messages: List[Dict[str, Any]], tool_info: Optional[str] = None) -> List[Dict[str, Any]]:
+    def _prepare_messages(
+        self, messages: List[Dict[str, Any]], tool_info: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
         """Prepare messages for Gemini
 
         Args:
@@ -58,8 +64,9 @@ class GeminiLLM(BaseLLM):
 
         return gemini_messages
 
-    async def generate(self, messages: List[Dict[str, Any]],
-                      tool_info: Optional[str] = None) -> str:
+    async def generate(
+        self, messages: List[Dict[str, Any]], tool_info: Optional[str] = None
+    ) -> str:
         """Generate a response
 
         Args:
@@ -73,10 +80,11 @@ class GeminiLLM(BaseLLM):
         gemini_messages = self._prepare_messages(messages, tool_info)
 
         response = model.generate_content(gemini_messages)
-        return response.text if hasattr(response, 'text') else ""
+        return response.text if hasattr(response, "text") else ""
 
-    async def generate_streaming(self, messages: List[Dict[str, Any]],
-                               tool_info: Optional[str] = None) -> AsyncGenerator[str, None]:
+    async def generate_streaming(
+        self, messages: List[Dict[str, Any]], tool_info: Optional[str] = None
+    ) -> AsyncGenerator[str, None]:
         """Generate a response with streaming
 
         Args:
@@ -92,5 +100,5 @@ class GeminiLLM(BaseLLM):
         response = model.generate_content(gemini_messages, stream=True)
 
         for chunk in response:
-            if hasattr(chunk, 'text'):
+            if hasattr(chunk, "text"):
                 yield chunk.text

@@ -1,5 +1,5 @@
 import os
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, Optional
 from contextlib import AsyncExitStack
 
 from mcp import ClientSession, StdioServerParameters
@@ -7,10 +7,13 @@ from mcp.client.stdio import stdio_client
 
 from .base import BaseConnector
 
+
 class StdioConnector(BaseConnector):
     """Connector for MCP implementations using stdio transport"""
 
-    def __init__(self, command: str, args: list[str], env: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self, command: str, args: list[str], env: Optional[Dict[str, Any]] = None
+    ):
         """Initialize a new stdio connector
 
         Args:
@@ -43,15 +46,17 @@ class StdioConnector(BaseConnector):
 
         # Create server parameters
         server_params = StdioServerParameters(
-            command=self.command,
-            args=self.args,
-            env=environment
+            command=self.command, args=self.args, env=environment
         )
 
         # Connect to the server
-        stdio_transport = await self.exit_stack.enter_async_context(stdio_client(server_params))
+        stdio_transport = await self.exit_stack.enter_async_context(
+            stdio_client(server_params)
+        )
         self.stdio, self.write = stdio_transport
-        self.session = await self.exit_stack.enter_async_context(ClientSession(self.stdio, self.write))
+        self.session = await self.exit_stack.enter_async_context(
+            ClientSession(self.stdio, self.write)
+        )
 
         self._connected = True
         return self.session
