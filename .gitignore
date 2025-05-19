@@ -4,6 +4,8 @@ __pycache__/
 *$py.class
 run.md
 # C extensions
+config.json
+config
 *.so
 .venv
 .env
