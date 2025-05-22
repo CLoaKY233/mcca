@@ -1,4 +1,3 @@
-# mcpclient/session.py
 from typing import Dict, Any, List, Optional
 from mcp.types import Tool
 from mcpclient.connectors.base import BaseConnector

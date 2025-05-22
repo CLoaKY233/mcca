@@ -264,9 +264,6 @@ def submit_query(query):
     st.rerun()
 
 
-# Check streaming status
-# Check streaming status
-# Check streaming status
 def check_streaming_status():
     """Check the status of streaming response"""
     if not st.session_state.is_processing:
@@ -311,7 +308,6 @@ def check_streaming_status():
     }
 
 
-# UI: Sidebar
 with st.sidebar:
     st.title("MCP Client")
 
@@ -357,7 +353,6 @@ with st.sidebar:
             tools = st.session_state.client.active_session.available_tools
             st.write(f"Available Tools: {len(tools) if tools else 0}")
 
-# UI: Main chat interface
 st.title("MCP Chat")
 
 # Connection status
@@ -368,7 +363,6 @@ elif not st.session_state.connected_server:
 else:
     st.success(f"Connected to {st.session_state.connected_server}")
 
-# Chat history
 # Chat history (including current streaming message if applicable)
 for i, message in enumerate(st.session_state.chat_history):
     with st.chat_message(message["role"]):
@@ -383,8 +377,6 @@ for i, message in enumerate(st.session_state.chat_history):
 
 
 # Streaming response (if processing)
-# Streaming response (if processing)
-# Streaming response (if processing)
 if st.session_state.is_processing:
     with st.chat_message("assistant"):
         message_placeholder = st.empty()
@@ -393,7 +385,6 @@ if st.session_state.is_processing:
         # Initialize last response length to track changes
         last_response_length = 0
 
-        # Check for response in a loop that doesn't require rerunning
         while True:
             # Get the latest status and response
             status = check_streaming_status()

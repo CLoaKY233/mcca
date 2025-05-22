@@ -5,9 +5,9 @@ from mcpclient.config import Config
 from mcpclient.session import MCPSession
 from mcpclient.connectors.stdio import StdioConnector
 from mcpclient.tools.extraction import ToolExtractor
-from mcpclient.tools.execution import ToolExecutor  # Import ToolExecutor
+from mcpclient.tools.execution import ToolExecutor
 from mcpclient.llm.gpt4o import GptLLM
-from mcpclient.llm.gemini import GeminiLLM  # Ensure GeminiLLM is imported
+from mcpclient.llm.gemini import GeminiLLM
 
 
 class MCPClient:
@@ -241,8 +241,7 @@ class MCPClient:
                     result_text = ToolExecutor.format_tool_result(result)
                     yield f"\n📊 Result:\n{result_text}"
 
-                    # Add tool result to conversation history - as a formatted string in a user message
-                    # This is more compatible with most LLM APIs
+                    # Add tool result to conversation history as a user message
                     result_content = f"TOOL RESULT: {tool_name}\n{result_text}"
                     messages.append({"role": "user", "content": result_content})
 
@@ -250,7 +249,7 @@ class MCPClient:
                     error_msg = f"\n❌ Error: {str(e)}"
                     yield error_msg
 
-                    # Add error to conversation history - as a formatted string in a user message
+                    # Add error to conversation history
                     error_content = f"TOOL ERROR: {tool_name}\n{str(e)}"
                     messages.append({"role": "user", "content": error_content})
 

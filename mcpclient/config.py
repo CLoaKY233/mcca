@@ -1,4 +1,3 @@
-# mcpclient/config.py
 import json
 import os
 from typing import Dict, Any, Optional

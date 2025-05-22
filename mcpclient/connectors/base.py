@@ -1,4 +1,3 @@
-# mcpclient/connectors/base.py
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, TypedDict, Union
 from mcp import ClientSession

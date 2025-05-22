@@ -1,8 +1,5 @@
-# mcpclient/tools/extraction.py
 import re
 import json
-
-# mcpclient/tools/extraction.py
 from typing import List, Tuple, Dict, Any, Optional
 
 

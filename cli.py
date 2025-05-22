@@ -1,4 +1,3 @@
-# mcpclient/cli.py
 import asyncio
 import sys
 import traceback

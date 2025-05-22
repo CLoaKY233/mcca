@@ -1,5 +1,3 @@
-# mcpclient/llm/gemini.py
-# type: ignore
 import os
 from typing import List, Dict, Any, AsyncGenerator, Optional
 import google.generativeai as genai
