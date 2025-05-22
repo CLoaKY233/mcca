@@ -11,12 +11,16 @@ import uuid
 # Fix path for imports
 try:
     from mcpclient.client import MCPClient
+    from mcpclient.llm.gpt4o import GptLLM
+    from mcpclient.llm.gemini import GeminiLLM
 except ImportError:
     # When running as standalone
     parent_dir = str(Path(__file__).parent.parent)
     if parent_dir not in sys.path:
         sys.path.append(parent_dir)
     from mcpclient.client import MCPClient
+    from mcpclient.llm.gpt4o import GptLLM
+    from mcpclient.llm.gemini import GeminiLLM
 
 # Set Windows event loop policy
 if sys.platform.startswith("win"):
@@ -29,7 +33,7 @@ st.set_page_config(page_title="MCP Client", page_icon="🤖", layout="wide")
 if "client" not in st.session_state:
     st.session_state.client = None
 if "config_path" not in st.session_state:
-    st.session_state.config_path = "mcp_config.json"
+    st.session_state.config_path = "config.json"
 if "available_servers" not in st.session_state:
     st.session_state.available_servers = []
 if "connected_server" not in st.session_state:
@@ -41,6 +45,8 @@ if "is_processing" not in st.session_state:
 if "session_id" not in st.session_state:
     # Generate a unique session ID for this Streamlit session
     st.session_state.session_id = str(uuid.uuid4())
+if "llm_model" not in st.session_state:
+    st.session_state.llm_model = "gpt"  # Default to GPT
 
 # Create a directory for temporary files
 temp_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "temp")
@@ -58,6 +64,15 @@ def run_async(coro):
         loop.close()
 
 
+# Function to create and configure a new LLM instance based on selection
+def create_llm_instance(model_name):
+    """Create a new LLM instance based on the selected model"""
+    if model_name == "gemini":
+        return GeminiLLM()
+    else:  # default to GPT
+        return GptLLM()
+
+
 # Load configuration file
 def load_config():
     """Load the configuration file and initialize the client"""
@@ -69,6 +84,12 @@ def load_config():
 
         # Create new client
         client = MCPClient(config_path=path)
+
+        # Set the LLM model based on selection
+        model_name = st.session_state.llm_model_select
+        client.llm = create_llm_instance(model_name)
+        st.session_state.llm_model = model_name
+
         st.session_state.client = client
 
         # Get available servers
@@ -81,11 +102,23 @@ def load_config():
         st.session_state.available_servers = available_servers
         st.session_state.config_path = path
 
-        st.success(f"Configuration loaded with {len(available_servers)} servers")
+        st.toast(f"Configuration loaded with {len(available_servers)} servers using {model_name.upper()} model",icon="✅")
     except Exception as e:
-        st.error(f"Error loading configuration: {str(e)}")
+        st.toast(f"Error loading configuration: {str(e)}",icon="❌")
         st.session_state.client = None
         st.session_state.available_servers = []
+
+
+# Change the LLM model
+def change_llm_model():
+    """Change the LLM model for the current client"""
+    model_name = st.session_state.llm_model_select
+    st.session_state.llm_model = model_name
+
+    if st.session_state.client:
+        # Create new LLM instance based on selection
+        st.session_state.client.llm = create_llm_instance(model_name)
+        st.toast(f"Using {model_name.upper()} model")
 
 
 # Connect to selected server
@@ -116,8 +149,6 @@ def connect_to_server():
         # Update state
         st.session_state.connected_server = server_name
         st.session_state.chat_history = []
-
-        st.success(f"Connected to {server_name}")
     except Exception as e:
         st.error(f"Error connecting to server: {str(e)}")
 
@@ -143,7 +174,7 @@ def disconnect_from_server():
 
 
 # Process query in a background thread
-def process_query_thread(config_path, server_name, query, session_id):
+def process_query_thread(config_path, server_name, query, session_id, llm_model):
     """Process a query in a background thread using a new client instance"""
     # Create temp files for this session
     response_file = os.path.join(temp_dir, f"response_{session_id}.txt")
@@ -159,6 +190,12 @@ def process_query_thread(config_path, server_name, query, session_id):
         # Create a new client instance specifically for this thread
         # This avoids sharing event loops between threads
         client = MCPClient(config_path=config_path)
+
+        # Set the LLM model based on the selected model
+        if llm_model == "gemini":
+            client.llm = GeminiLLM()
+        else:  # default to GPT
+            client.llm = GptLLM()
 
         # Create a new event loop for this thread
         loop = asyncio.new_event_loop()
@@ -251,11 +288,12 @@ def submit_query(query):
     config_path = st.session_state.config_path
     server_name = st.session_state.connected_server
     session_id = st.session_state.session_id
+    llm_model = st.session_state.llm_model
 
     # Start processing thread with isolated client
     thread = threading.Thread(
         target=process_query_thread,
-        args=(config_path, server_name, query, session_id),
+        args=(config_path, server_name, query, session_id, llm_model),
         daemon=True,
     )
     thread.start()
@@ -314,7 +352,20 @@ with st.sidebar:
     # Configuration
     st.header("Configuration")
     st.text_input("Config Path", value=st.session_state.config_path, key="config_input")
-    st.button("Load Configuration", on_click=load_config)
+    # Load configuration button
+    st.button("Load Configuration", on_click=load_config,type="secondary")
+    # LLM Model selection
+    st.header("LLM Model")
+    model_options = ["gpt", "gemini"]
+    st.selectbox(
+        "Select LLM Model",
+        options=model_options,
+        index=model_options.index(st.session_state.llm_model),
+        key="llm_model_select",
+        on_change=change_llm_model
+    )
+
+
 
     # Server selection
     if st.session_state.available_servers:
@@ -343,12 +394,16 @@ with st.sidebar:
         # Display connection status
         if st.session_state.connected_server:
             st.success(f"Connected: {st.session_state.connected_server}")
+            st.info(f"Using: {st.session_state.llm_model.upper()} model")
 
     # Add debug info expander
     with st.expander("Debug Info", expanded=False):
         st.write(f"Session ID: {st.session_state.session_id[:8]}...")
         st.write(f"Processing: {st.session_state.is_processing}")
         st.write(f"Connected Server: {st.session_state.connected_server}")
+        st.write(f"LLM Model: {st.session_state.llm_model}")
+        if st.session_state.client and hasattr(st.session_state.client, 'llm'):
+            st.write(f"Client LLM Type: {type(st.session_state.client.llm).__name__}")
         if st.session_state.client and st.session_state.client.active_session:
             tools = st.session_state.client.active_session.available_tools
             st.write(f"Available Tools: {len(tools) if tools else 0}")
@@ -361,7 +416,7 @@ if not st.session_state.client:
 elif not st.session_state.connected_server:
     st.warning("Please connect to a server")
 else:
-    st.success(f"Connected to {st.session_state.connected_server}")
+    st.success(f"Connected to {st.session_state.connected_server} using {st.session_state.llm_model.upper()} model")
 
 # Chat history (including current streaming message if applicable)
 for i, message in enumerate(st.session_state.chat_history):
