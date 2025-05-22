@@ -4,9 +4,10 @@ import traceback
 from mcpclient.config import Config
 from mcpclient.session import MCPSession
 from mcpclient.connectors.stdio import StdioConnector
-from mcpclient.llm.gemini import GeminiLLM  # Ensure GeminiLLM is imported
 from mcpclient.tools.extraction import ToolExtractor
 from mcpclient.tools.execution import ToolExecutor  # Import ToolExecutor
+from mcpclient.llm.gpt4o import GptLLM
+from mcpclient.llm.gemini import GeminiLLM  # Ensure GeminiLLM is imported
 
 
 class MCPClient:
@@ -26,7 +27,7 @@ class MCPClient:
         self.config = Config(config_path, config_dict)
         self.active_session: Optional[MCPSession] = None
         self.active_server_name: Optional[str] = None
-        self.llm = GeminiLLM()
+        self.llm = GptLLM()
 
     async def connect_to_server(self, server_name: str) -> None:
         """Connect to a server
@@ -209,9 +210,7 @@ class MCPClient:
                     yield "\n\n"
 
                 # Stream LLM response
-                async for chunk in self.llm.generate_streaming(
-                    messages, tool_info if turn_count == 1 else None
-                ):
+                async for chunk in self.llm.generate_streaming(messages, tool_info if turn_count == 1 else None):
                     llm_response += chunk
                     yield chunk
 

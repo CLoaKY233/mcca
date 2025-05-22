@@ -4,7 +4,6 @@ import os
 import sys
 import threading
 import time
-import traceback
 import json
 from pathlib import Path
 import uuid
@@ -20,15 +19,11 @@ except ImportError:
     from mcpclient.client import MCPClient
 
 # Set Windows event loop policy
-if sys.platform.startswith('win'):
+if sys.platform.startswith("win"):
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
 # Page config
-st.set_page_config(
-    page_title="MCP Client",
-    page_icon="🤖",
-    layout="wide"
-)
+st.set_page_config(page_title="MCP Client", page_icon="🤖", layout="wide")
 
 # Initialize session state variables
 if "client" not in st.session_state:
@@ -51,6 +46,7 @@ if "session_id" not in st.session_state:
 temp_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "temp")
 os.makedirs(temp_dir, exist_ok=True)
 
+
 # Run async code
 def run_async(coro):
     """Run an async coroutine and return the result"""
@@ -60,6 +56,7 @@ def run_async(coro):
         return loop.run_until_complete(coro)
     finally:
         loop.close()
+
 
 # Load configuration file
 def load_config():
@@ -89,6 +86,7 @@ def load_config():
         st.error(f"Error loading configuration: {str(e)}")
         st.session_state.client = None
         st.session_state.available_servers = []
+
 
 # Connect to selected server
 def connect_to_server():
@@ -123,6 +121,7 @@ def connect_to_server():
     except Exception as e:
         st.error(f"Error connecting to server: {str(e)}")
 
+
 # Disconnect from server
 def disconnect_from_server():
     """Disconnect from the current server"""
@@ -142,6 +141,7 @@ def disconnect_from_server():
     except Exception as e:
         st.error(f"Error disconnecting: {str(e)}")
 
+
 # Process query in a background thread
 def process_query_thread(config_path, server_name, query, session_id):
     """Process a query in a background thread using a new client instance"""
@@ -153,11 +153,7 @@ def process_query_thread(config_path, server_name, query, session_id):
     with open(response_file, "w", encoding="utf-8") as f:
         f.write("")
     with open(status_file, "w", encoding="utf-8") as f:
-        json.dump({
-            "complete": False,
-            "tool": None,
-            "error": None
-        }, f)
+        json.dump({"complete": False, "tool": None, "error": None}, f)
 
     try:
         # Create a new client instance specifically for this thread
@@ -183,6 +179,7 @@ def process_query_thread(config_path, server_name, query, session_id):
                     # Look for tool execution indicators
                     if "Using tool:" in chunk:
                         import re
+
                         tool_match = re.search(r"Using tool: (\w+)", chunk)
                         if tool_match:
                             current_tool = tool_match.group(1)
@@ -196,19 +193,13 @@ def process_query_thread(config_path, server_name, query, session_id):
 
                     # Update status
                     with open(status_file, "w", encoding="utf-8") as f:
-                        json.dump({
-                            "complete": False,
-                            "tool": current_tool,
-                            "error": None
-                        }, f)
+                        json.dump(
+                            {"complete": False, "tool": current_tool, "error": None}, f
+                        )
 
                 # Streaming complete
                 with open(status_file, "w", encoding="utf-8") as f:
-                    json.dump({
-                        "complete": True,
-                        "tool": None,
-                        "error": None
-                    }, f)
+                    json.dump({"complete": True, "tool": None, "error": None}, f)
 
             except Exception as e:
                 # Handle streaming errors
@@ -217,11 +208,7 @@ def process_query_thread(config_path, server_name, query, session_id):
                     f.write(error_msg)
 
                 with open(status_file, "w", encoding="utf-8") as f:
-                    json.dump({
-                        "complete": True,
-                        "tool": None,
-                        "error": str(e)
-                    }, f)
+                    json.dump({"complete": True, "tool": None, "error": str(e)}, f)
 
             finally:
                 # Always disconnect
@@ -242,11 +229,8 @@ def process_query_thread(config_path, server_name, query, session_id):
             f.write(f"\n\nThread Error: {str(e)}")
 
         with open(status_file, "w", encoding="utf-8") as f:
-            json.dump({
-                "complete": True,
-                "tool": None,
-                "error": str(e)
-            }, f)
+            json.dump({"complete": True, "tool": None, "error": str(e)}, f)
+
 
 # Submit a query
 def submit_query(query):
@@ -272,13 +256,16 @@ def submit_query(query):
     thread = threading.Thread(
         target=process_query_thread,
         args=(config_path, server_name, query, session_id),
-        daemon=True
+        daemon=True,
     )
     thread.start()
 
     # Force UI update
     st.rerun()
 
+
+# Check streaming status
+# Check streaming status
 # Check streaming status
 def check_streaming_status():
     """Check the status of streaming response"""
@@ -315,40 +302,14 @@ def check_streaming_status():
             st.error(f"Error reading status file: {e}")
             is_complete = True  # Force completion on error
 
-    # If streaming is complete, update chat history and reset
-    if is_complete:
-        # Add response to chat history
-        if current_response:
-            st.session_state.chat_history.append({
-                "role": "assistant",
-                "content": current_response
-            })
-        else:
-            st.session_state.chat_history.append({
-                "role": "assistant",
-                "content": "*No response received*"
-            })
-
-        # Reset processing state
-        st.session_state.is_processing = False
-
-        # Clean up temp files
-        try:
-            if os.path.exists(response_file):
-                os.remove(response_file)
-            if os.path.exists(status_file):
-                os.remove(status_file)
-        except:
-            pass
-
-        return True  # Completed
-
-    # Return current response data for display
+    # Return a dictionary with the status info
     return {
+        "complete": is_complete,
         "response": current_response,
         "tool": current_tool,
         "error": error
     }
+
 
 # UI: Sidebar
 with st.sidebar:
@@ -365,7 +326,7 @@ with st.sidebar:
         selected_server = st.selectbox(
             "Select Server",
             options=st.session_state.available_servers,
-            key="server_select"
+            key="server_select",
         )
 
         col1, col2 = st.columns(2)
@@ -373,13 +334,14 @@ with st.sidebar:
             st.button(
                 "Connect",
                 on_click=connect_to_server,
-                disabled=st.session_state.is_processing
+                disabled=st.session_state.is_processing,
             )
         with col2:
             st.button(
                 "Disconnect",
                 on_click=disconnect_from_server,
-                disabled=st.session_state.is_processing or not st.session_state.connected_server
+                disabled=st.session_state.is_processing
+                or not st.session_state.connected_server,
             )
 
         # Display connection status
@@ -407,41 +369,71 @@ else:
     st.success(f"Connected to {st.session_state.connected_server}")
 
 # Chat history
-for message in st.session_state.chat_history:
+# Chat history (including current streaming message if applicable)
+for i, message in enumerate(st.session_state.chat_history):
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
+    # If this is the last user message and we're processing, show assistant response right after
+    if (st.session_state.is_processing and
+        i == len(st.session_state.chat_history) - 1 and
+        message["role"] == "user"):
+        # Streaming response will come next
+        pass  # The streaming section below will handle showing the response
+
+
+# Streaming response (if processing)
+# Streaming response (if processing)
 # Streaming response (if processing)
 if st.session_state.is_processing:
-    # Check streaming status
-    status = check_streaming_status()
+    with st.chat_message("assistant"):
+        message_placeholder = st.empty()
+        status_placeholder = st.empty()
 
-    if status is True:
-        # Streaming is complete, rerun to update UI
-        st.rerun()
-    elif status:
-        # Display current response
-        with st.chat_message("assistant"):
-            response_text = status["response"]
+        # Initialize last response length to track changes
+        last_response_length = 0
 
-            # Add cursor or tool indicator
-            if status["tool"]:
-                cursor = f" (Executing tool {status['tool']}...)"
-            else:
-                cursor = "▌"
+        # Check for response in a loop that doesn't require rerunning
+        while True:
+            # Get the latest status and response
+            status = check_streaming_status()
 
-            st.markdown(response_text + cursor)
+            # Show response if we have one
+            if status and "response" in status:
+                current_response = status["response"]
 
-            if status["error"]:
-                st.error(f"Error: {status['error']}")
+                # Only update if the response has changed
+                if len(current_response) != last_response_length:
+                    # Add cursor or tool indicator
+                    display_text = current_response
+                    if status.get("tool"):
+                        display_text += f" (Executing tool {status['tool']}...)"
+                    else:
+                        display_text += "▌" if not status.get("complete") else ""
 
-        # Auto-update if still streaming
-        time.sleep(0.1)  # Small delay to prevent too frequent refreshes
-        st.rerun()
+                    # Update the message placeholder
+                    message_placeholder.markdown(display_text)
+                    last_response_length = len(current_response)
+
+                # Show error if there is one
+                if status.get("error"):
+                    status_placeholder.error(f"Error: {status['error']}")
+
+                # If complete, add to chat history and break the loop
+                if status.get("complete", False):
+                    # Add the final response to chat history
+                    st.session_state.chat_history.append({"role": "assistant", "content": current_response})
+                    st.session_state.is_processing = False
+                    break
+
+            # Brief pause before checking again
+            time.sleep(0.3)
 
 # Chat input
 disabled_chat = not st.session_state.connected_server or st.session_state.is_processing
-placeholder = "Processing..." if st.session_state.is_processing else "Enter your query..."
+placeholder = (
+    "Processing..." if st.session_state.is_processing else "Enter your query..."
+)
 
 if prompt := st.chat_input(placeholder, disabled=disabled_chat):
     submit_query(prompt)
